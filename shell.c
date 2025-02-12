@@ -4,9 +4,13 @@
 #include <stdbool.h>
 #include <string.h>
 
-int intMode();
+int intMode(char *args[]);
 void errorMsg();
-int builtins(char *hello);
+int builtins(char *args[]);
+int shellLoop();
+int cleanInput(char *input);
+int parseInput(char *input);
+int printHistory(char *input);
 
 void errorMsg()
 {
@@ -20,7 +24,7 @@ int main(int argc, char *argv[])
     if (argc == 1)
     {
         printf("Interactive Mode\n");
-        intMode();
+        shellLoop();
     }
 
     else if (argc == 2)
@@ -37,28 +41,99 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-int intMode()
+int intMode(char *args[])
 {
-    size_t bufferSize = 100;
-    char *input = malloc(bufferSize);
+    // exit, cd, kill, history, pwd, and path
+    if (!strcmp(args[0], "exit") | !strcmp(args[0], "cd") | !strcmp(args[0], "kill") | !strcmp(args[0], "history") | !strcmp(args[0], "pwd") | !strcmp(args[0], "path"))
+    {
+        printf("BUILTIN MODE\n");
+        builtins(args);
+    }
+    else
+    {
+        printf("EXEC MODE");
+    }
+    return 0;
+}
+
+int builtins(char *args[])
+{
+    if (!strcmp(args[0], "exit"))
+    {
+        exit(0);
+    }
+    else if (!strcmp(args[0], "cd"))
+    {
+        printf("CD");
+    }
+    else if (!strcmp(args[0], "kill"))
+    {
+        printf("KILL");
+    }
+    else if (!strcmp(args[0], "history"))
+    {
+        printf("HISTORY");
+    }
+    else if (!strcmp(args[0], "pwd"))
+    {
+        printf("PWD");
+    }
+    else if (!strcmp(args[0], "path"))
+    {
+        printf("PATH");
+    }
+
+    return 0;
+}
+
+int shellLoop()
+{
+    size_t buff = 256;
+    char *input = malloc(buff);
     while (true)
     {
         printf("$> ");
-        getline(&input, &bufferSize, stdin);
-        builtins(input);
+        getline(&input, &buff, stdin);
+        cleanInput(input);
     }
     free(input);
 }
 
-int builtins(char *input)
+int cleanInput(char *input)
 {
-    // remove newline char
-    input[strlen(input) - 1] = '\0';
-    printf("%lu\n", strlen(input));
-    // char *token = strtok(input, " ");
-    // printf("%s\n", token + 1);
+    while (*input == ' ' | *input == '\t')
+    {
+        input++;
+    }
+    if (input[strlen(input) - 1] == '\n')
+    {
+        input[strlen(input) - 1] = '\0';
+    }
+    printf("%s\n", input);
+    parseInput(input);
+    printHistory(input);
+    return 0;
+}
 
-    // exit, cd, kill, history, pwd, and path
-    printf("Input from shell: %s\n", input);
+int parseInput(char *input)
+{
+    int i = 0;
+    char *args[100];
+
+    char *tokens = strtok(input, " ");
+
+    while (tokens != NULL)
+    {
+        args[i++] = tokens;
+        tokens = strtok(NULL, " ");
+    }
+    args[i] = NULL;
+    intMode(args);
+    return 0;
+}
+
+int printHistory(char *input)
+{
+    char *history[10];
     return 0;
 }
