@@ -4,6 +4,12 @@
 #include <stdbool.h>
 #include <string.h>
 
+#define HISTORY_SIZE 10
+
+// Global history array to retain previous commands
+char *history[HISTORY_SIZE];
+int history_count = 0; // Number of stored commands
+
 int intMode(char *args[]);
 void errorMsg();
 int builtins(char *args[]);
@@ -134,6 +140,17 @@ int parseInput(char *input)
 
 int printHistory(char *input)
 {
-    char *history[10];
+    if (strcmp(input, "history") != 0)
+    {
+        if (history_count < HISTORY_SIZE)
+        {
+            history[history_count] = input;
+        }
+        if (history_count < HISTORY_SIZE)
+        {
+            history_count++;
+        }
+        printf("%s\n", history[3]);
+    }
     return 0;
 }
