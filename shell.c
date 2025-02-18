@@ -17,6 +17,9 @@ int shellLoop();
 int cleanInput(char *input);
 int parseInput(char *input);
 int printHistory(char *input);
+int changeDir(char *args[]);
+int countArgs(char *args[]);
+int printDir();
 
 void errorMsg()
 {
@@ -71,6 +74,7 @@ int builtins(char *args[])
     else if (!strcmp(args[0], "cd"))
     {
         printf("CD");
+        changeDir(args);
     }
     else if (!strcmp(args[0], "kill"))
     {
@@ -78,11 +82,12 @@ int builtins(char *args[])
     }
     else if (!strcmp(args[0], "history"))
     {
-        printf("HISTORY");
+        printf("HISTORY\n");
     }
     else if (!strcmp(args[0], "pwd"))
     {
         printf("PWD");
+        printDir();
     }
     else if (!strcmp(args[0], "path"))
     {
@@ -142,15 +147,45 @@ int printHistory(char *input)
 {
     if (strcmp(input, "history") != 0)
     {
-        if (history_count < HISTORY_SIZE)
-        {
-            history[history_count] = input;
-        }
+        history[history_count % HISTORY_SIZE] = strdup(input);
         if (history_count < HISTORY_SIZE)
         {
             history_count++;
         }
-        printf("%s\n", history[3]);
     }
+    else
+    {
+        for (int i = 0; i < history_count; i++)
+        {
+            printf("%d %s\n", i + 1, history[i]);
+        }
+    }
+    return 0;
+}
+
+int changeDir(char *args[])
+{
+    char s[100];
+
+    if (countArgs(args) > 2)
+        errorMsg();
+    printf("%s\n", getcwd(s, 100));
+    int cDir = chdir(args[1]);
+    printf("%s\n", getcwd(s, 100));
+    return 0;
+}
+
+int countArgs(char *args[])
+{
+    int count = 0;
+    while (args[count] != NULL)
+        count++;
+    return count;
+}
+
+int printDir()
+{
+    char s[100];
+    printf("%s\n", getcwd(s, 100));
     return 0;
 }
