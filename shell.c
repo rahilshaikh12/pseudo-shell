@@ -26,6 +26,7 @@ int countArgs(char *args[]);
 int printDir();
 int setPath(char *args[]);
 int initializePath();
+int execCommand(char *args[]);
 
 void errorMsg()
 {
@@ -68,6 +69,7 @@ int intMode(char *args[])
     else
     {
         printf("EXEC MODE");
+        execCommand(args);
     }
     return 0;
 }
@@ -224,5 +226,49 @@ int initializePath()
 {
     path[0] = strdup("/bin");
     path_count += 1;
+    return 0;
+}
+
+int execCommand(char *args[])
+{
+    char *command = args[0];
+    char fullPath[256];
+    char sign[] = "/";
+
+    if (command[0] == '/' || command[0] == '.')
+    {
+        printf("Absolute or ");
+        int forkId = fork();
+
+        if (forkId == 0)
+        {
+            execve(command, args, NULL);
+            errorMsg();
+            exit(1);
+        }
+
+        wait(NULL);
+        return 0;
+    }
+
+    for (int i = 0; i < path_count; i++)
+    {
+        snprintf(fullPath, sizeof(fullPath), "%s/%s", path[i], args[0]);
+        if (access(fullPath, X_OK) == 0)
+        {
+            int forkId2 = fork();
+
+            if (forkId2 == 0)
+            {
+                execve(fullPath, args, NULL);
+                errorMsg();
+                exit(1);
+            }
+        }
+
+        wait(NULL);
+        return 0;
+    }
+
     return 0;
 }
