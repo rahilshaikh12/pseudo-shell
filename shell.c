@@ -5,10 +5,14 @@
 #include <string.h>
 
 #define HISTORY_SIZE 10
+#define PATH_COUNT 100
 
 // Global history array to retain previous commands
 char *history[HISTORY_SIZE];
 int history_count = 0; // Number of stored commands
+
+char *path[PATH_COUNT];
+int path_count = 0;
 
 int intMode(char *args[]);
 void errorMsg();
@@ -20,6 +24,8 @@ int printHistory(char *input);
 int changeDir(char *args[]);
 int countArgs(char *args[]);
 int printDir();
+int setPath(char *args[]);
+int initializePath();
 
 void errorMsg()
 {
@@ -29,6 +35,7 @@ void errorMsg()
 
 int main(int argc, char *argv[])
 {
+    initializePath();
 
     if (argc == 1)
     {
@@ -92,6 +99,7 @@ int builtins(char *args[])
     else if (!strcmp(args[0], "path"))
     {
         printf("PATH");
+        setPath(args);
     }
 
     return 0;
@@ -171,6 +179,9 @@ int changeDir(char *args[])
         errorMsg();
     printf("%s\n", getcwd(s, 100));
     int cDir = chdir(args[1]);
+    if (cDir != 0)
+        errorMsg();
+
     printf("%s\n", getcwd(s, 100));
     return 0;
 }
@@ -187,5 +198,31 @@ int printDir()
 {
     char s[100];
     printf("%s\n", getcwd(s, 100));
+    return 0;
+}
+
+int setPath(char *args[])
+{
+    printf("%s\n", path[0]);
+    memset(path, 0, sizeof(path));
+    path_count = 0;
+
+    if (args[1] == NULL)
+        return 0;
+    int i = 0;
+    while (args[i + 1] != NULL && i < PATH_COUNT)
+    {
+        path[i] = strdup(args[i + 1]); // Copy new paths
+        i++;
+    }
+    path_count = i;
+
+    return 0;
+}
+
+int initializePath()
+{
+    path[0] = strdup("/bin");
+    path_count += 1;
     return 0;
 }
