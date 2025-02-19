@@ -74,6 +74,8 @@ int intMode(char *args[])
     {
         printf("EXEC MODE");
         execCommand(args);
+        for (int i = 0; i < 6; i++)
+            printf("%s", args[i]);
     }
     return 0;
 }
@@ -355,35 +357,72 @@ int redirect(char *args[], int k)
 {
     int file;
     char *arr[50];
-    if (args[k + 2] == NULL)
-    {
-        if (!strcmp(args[k], "<"))
-            printf("REDIRECT IN");
-        else if (!strcmp(args[k], ">"))
-        {
-            printf("REDIRECT OUT");
-            file = open(args[k + 1], O_WRONLY | O_CREAT | O_TRUNC, 0777);
-            if (file == -1)
-                errorMsg();
-            int file2 = dup2(file, STDOUT_FILENO);
-            if (file2 == -1)
-                errorMsg();
-        }
-    }
-    else
+
+    // ✅ Backup original stdout and stdin
+    int stdoutCopy = dup(STDOUT_FILENO);
+    int stdinCopy = dup(STDIN_FILENO);
+
+    // ✅ Ensure only one filename is provided after `>` or `<`
+    if (args[k + 1] == NULL)
     {
         errorMsg();
         return 1;
     }
 
+    // ✅ Prepare command without redirection symbol and file name
     int j = 0;
     for (int i = 0; i < k; i++)
     {
-        arr[j++] = args[i];
+        arr[j++] = args[i]; // Copy command arguments before `>` or `<`
     }
-    arr[j] = NULL;
-    intMode(arr);
+    arr[j] = NULL; // Null terminate command
+
+    // ✅ Handle input redirection (`<`)
+    if (!strcmp(args[k], "<"))
+    {
+        printf("REDIRECT IN\n");
+        file = open(args[k + 1], O_RDONLY, 0777);
+        if (file == -1)
+        {
+            errorMsg();
+            return 1;
+        }
+        if (dup2(file, STDIN_FILENO) == -1)
+        {
+            errorMsg();
+            close(file);
+            return 1;
+        }
+    }
+    // ✅ Handle output redirection (`>`)
+    else if (!strcmp(args[k], ">"))
+    {
+        printf("REDIRECT OUT\n");
+        file = open(args[k + 1], O_WRONLY | O_CREAT | O_TRUNC, 0777);
+        if (file == -1)
+        {
+            errorMsg();
+            return 1;
+        }
+        if (dup2(file, STDOUT_FILENO) == -1)
+        {
+            errorMsg();
+            close(file);
+            return 1;
+        }
+    }
+
+    // ✅ Close the file after redirection setup
     close(file);
+
+    // ✅ Execute the command with modified stdin/stdout
+    intMode(arr);
+
+    // ✅ Restore stdout and stdin after execution
+    dup2(stdoutCopy, STDOUT_FILENO);
+    close(stdoutCopy);
+    dup2(stdinCopy, STDIN_FILENO);
+    close(stdinCopy);
 
     return 0;
 }
