@@ -31,6 +31,7 @@ int execCommand(char *args[]);
 int redirect(char *args[], int);
 int processChange(char *args[], int k);
 int sendInput(char *args[], int k);
+int parallelProcess(char *args[], int);
 
 void errorMsg()
 {
@@ -64,17 +65,24 @@ int main(int argc, char *argv[])
 
 int intMode(char *args[])
 {
-    // exit, cd, kill, history, pwd, and path
-    if (!strcmp(args[0], "exit") | !strcmp(args[0], "cd") | !strcmp(args[0], "kill") | !strcmp(args[0], "history") | !strcmp(args[0], "pwd") | !strcmp(args[0], "path"))
+    printf("DEBUG: %s %s", args[0], args[1]);
+    if (args == NULL || args[0] == NULL)
+    {
+        errorMsg();
+        return 1;
+    }
+
+    if (!strcmp(args[0], "exit") || !strcmp(args[0], "cd") || !strcmp(args[0], "kill") ||
+        !strcmp(args[0], "history") || !strcmp(args[0], "pwd") || !strcmp(args[0], "path"))
     {
         printf("BUILTIN MODE\n");
         builtins(args);
     }
     else
     {
-        printf("EXEC MODE");
+        printf("EXEC MODE\n");
         execCommand(args);
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < 6 && args[i] != NULL; i++)
             printf("%s", args[i]);
     }
     return 0;
@@ -240,6 +248,7 @@ int execCommand(char *args[])
     char *command = args[0];
     char fullPath[256];
     char sign[] = "/";
+    printf("DEBUG: IN EXEC");
 
     if (command[0] == '/' || command[0] == '.')
     {
@@ -343,7 +352,10 @@ int sendInput(char *args[], int k)
     if (pipeCount > 0)
         printf("PIPES");
     if (processCount > 0)
+    {
         printf("PROCESS");
+        parallelProcess(args, k);
+    }
 
     if (redirectCount == 0 && pipeCount == 0 && processCount == 0)
     {
@@ -357,72 +369,79 @@ int redirect(char *args[], int k)
 {
     int file;
     char *arr[50];
-
-    // ✅ Backup original stdout and stdin
     int stdoutCopy = dup(STDOUT_FILENO);
-    int stdinCopy = dup(STDIN_FILENO);
-
-    // ✅ Ensure only one filename is provided after `>` or `<`
-    if (args[k + 1] == NULL)
+    if (args[k + 2] == NULL)
+    {
+        if (!strcmp(args[k], "<"))
+            printf("REDIRECT IN");
+        else if (!strcmp(args[k], ">"))
+        {
+            printf("REDIRECT OUT");
+            file = open(args[k + 1], O_WRONLY | O_CREAT | O_TRUNC, 0777);
+            if (file == -1)
+                errorMsg();
+            int file2 = dup2(file, STDOUT_FILENO);
+            if (file2 == -1)
+                errorMsg();
+        }
+    }
+    else
     {
         errorMsg();
         return 1;
     }
-
-    // ✅ Prepare command without redirection symbol and file name
     int j = 0;
     for (int i = 0; i < k; i++)
     {
-        arr[j++] = args[i]; // Copy command arguments before `>` or `<`
+        arr[j++] = args[i];
     }
-    arr[j] = NULL; // Null terminate command
-
-    // ✅ Handle input redirection (`<`)
-    if (!strcmp(args[k], "<"))
-    {
-        printf("REDIRECT IN\n");
-        file = open(args[k + 1], O_RDONLY, 0777);
-        if (file == -1)
-        {
-            errorMsg();
-            return 1;
-        }
-        if (dup2(file, STDIN_FILENO) == -1)
-        {
-            errorMsg();
-            close(file);
-            return 1;
-        }
-    }
-    // ✅ Handle output redirection (`>`)
-    else if (!strcmp(args[k], ">"))
-    {
-        printf("REDIRECT OUT\n");
-        file = open(args[k + 1], O_WRONLY | O_CREAT | O_TRUNC, 0777);
-        if (file == -1)
-        {
-            errorMsg();
-            return 1;
-        }
-        if (dup2(file, STDOUT_FILENO) == -1)
-        {
-            errorMsg();
-            close(file);
-            return 1;
-        }
-    }
-
-    // ✅ Close the file after redirection setup
+    arr[j] = NULL;
+    intMode(arr);
     close(file);
 
-    // ✅ Execute the command with modified stdin/stdout
-    intMode(arr);
-
-    // ✅ Restore stdout and stdin after execution
     dup2(stdoutCopy, STDOUT_FILENO);
     close(stdoutCopy);
-    dup2(stdinCopy, STDIN_FILENO);
-    close(stdinCopy);
+
+    return 0;
+}
+
+int parallelProcess(char *args[], int k)
+{
+    int start = 0;
+    int lastForeground = 1;
+    for (int i = 0; i <= k; i++)
+    {
+        if (i == k || strcmp(args[i], "&") == 0)
+        {
+
+            args[i] = NULL;
+
+            int forkID = fork();
+
+            if (forkID == 0)
+            {
+                execvp(args[start], &args[start]);
+                perror("execvp failed");
+                exit(1);
+            }
+            else if (forkID < 0)
+            {
+                perror("fork failed");
+            }
+
+            if (i == k)
+            {
+                wait(NULL);
+            }
+            else
+            {
+                printf("[Background PID] %d\n", forkID);
+            }
+
+            start = i + 1;
+            lastForeground = (i == k);
+        }
+    }
 
     return 0;
 }
