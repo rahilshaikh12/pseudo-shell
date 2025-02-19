@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <string.h>
+#include <fcntl.h>
 
 #define HISTORY_SIZE 10
 #define PATH_COUNT 100
@@ -27,6 +28,9 @@ int printDir();
 int setPath(char *args[]);
 int initializePath();
 int execCommand(char *args[]);
+int redirect(char *args[], int);
+int processChange(char *args[], int k);
+int sendInput(char *args[], int k);
 
 void errorMsg()
 {
@@ -149,7 +153,7 @@ int parseInput(char *input)
         tokens = strtok(NULL, " ");
     }
     args[i] = NULL;
-    intMode(args);
+    sendInput(args, i);
     return 0;
 }
 
@@ -269,6 +273,117 @@ int execCommand(char *args[])
         wait(NULL);
         return 0;
     }
+
+    return 0;
+}
+
+int processChange(char *args[], int k)
+{
+
+    return 0;
+}
+
+int sendInput(char *args[], int k)
+{
+    int indx = 0;
+    int redirectCount = 0;
+    int pipeCount = 0;
+    int processCount = 0;
+    bool isRedirect = false;
+    bool isPipe = false;
+    bool isProcess = false;
+
+    for (int i = 0; i < k; i++)
+    {
+        if (!strcmp(args[i], "<") || !strcmp(args[i], ">"))
+        {
+            redirectCount++;
+            isRedirect = true;
+
+            if (redirectCount == 1)
+                indx = i;
+        }
+        if (!strcmp(args[i], "|"))
+        {
+            pipeCount++;
+            isPipe = true;
+        }
+        if (!strcmp(args[i], "&"))
+        {
+            processCount++;
+            isProcess = true;
+        }
+    }
+
+    if (redirectCount > 1)
+    {
+        errorMsg();
+        return 1;
+    }
+
+    if (pipeCount > 4)
+    {
+        errorMsg();
+        return 1;
+    }
+
+    if (processCount > 10)
+    {
+        errorMsg();
+        return 1;
+    }
+
+    if (redirectCount == 1)
+    {
+        printf("REDIRECT");
+        redirect(args, indx);
+    }
+    if (pipeCount > 0)
+        printf("PIPES");
+    if (processCount > 0)
+        printf("PROCESS");
+
+    if (redirectCount == 0 && pipeCount == 0 && processCount == 0)
+    {
+        intMode(args);
+    }
+
+    return 0;
+}
+
+int redirect(char *args[], int k)
+{
+    int file;
+    char *arr[50];
+    if (args[k + 2] == NULL)
+    {
+        if (!strcmp(args[k], "<"))
+            printf("REDIRECT IN");
+        else if (!strcmp(args[k], ">"))
+        {
+            printf("REDIRECT OUT");
+            file = open(args[k + 1], O_WRONLY | O_CREAT | O_TRUNC, 0777);
+            if (file == -1)
+                errorMsg();
+            int file2 = dup2(file, STDOUT_FILENO);
+            if (file2 == -1)
+                errorMsg();
+        }
+    }
+    else
+    {
+        errorMsg();
+        return 1;
+    }
+
+    int j = 0;
+    for (int i = 0; i < k; i++)
+    {
+        arr[j++] = args[i];
+    }
+    arr[j] = NULL;
+    intMode(arr);
+    close(file);
 
     return 0;
 }
