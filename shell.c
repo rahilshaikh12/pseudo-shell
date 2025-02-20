@@ -28,10 +28,14 @@ int printDir();
 int setPath(char *args[]);
 int initializePath();
 int execCommand(char *args[]);
-int redirect(char *args[], int);
 int processChange(char *args[], int k);
 int sendInput(char *args[], int k);
 int parallelProcess(char *args[], int);
+int batchMode(char *argv[]);
+int redirectOut(char *args[], int k);
+int redirectIn(char *args[], int k);
+int pipes(char *args[], int k);
+int runHistory(char *args);
 
 void errorMsg()
 {
@@ -52,6 +56,7 @@ int main(int argc, char *argv[])
     else if (argc == 2)
     {
         printf("Batch Mode\n");
+        batchMode(argv);
     }
 
     else
@@ -136,6 +141,7 @@ int shellLoop()
 
 int cleanInput(char *input)
 {
+    char *originalInput = strdup(input);
     while (*input == ' ' | *input == '\t')
     {
         input++;
@@ -143,10 +149,11 @@ int cleanInput(char *input)
     if (input[strlen(input) - 1] == '\n')
     {
         input[strlen(input) - 1] = '\0';
+        originalInput[strlen(originalInput) - 1] = '\0';
     }
     printf("%s\n", input);
     parseInput(input);
-    printHistory(input);
+    printHistory(originalInput);
     return 0;
 }
 
@@ -154,7 +161,6 @@ int parseInput(char *input)
 {
     int i = 0;
     char *args[100];
-
     char *tokens = strtok(input, " ");
 
     while (tokens != NULL)
@@ -169,19 +175,22 @@ int parseInput(char *input)
 
 int printHistory(char *input)
 {
-    if (strcmp(input, "history") != 0)
+    printf("INPUT IN HISTORY %s", input);
+    if (!strcmp(input, "history"))
+    {
+        for (int i = 0; i < history_count; i++)
+        {
+            printf("%d %s\n", i + 1, history[i]);
+        }
+    }
+    else if (input[0] == '!')
+        return 0;
+    else
     {
         history[history_count % HISTORY_SIZE] = strdup(input);
         if (history_count < HISTORY_SIZE)
         {
             history_count++;
-        }
-    }
-    else
-    {
-        for (int i = 0; i < history_count; i++)
-        {
-            printf("%d %s\n", i + 1, history[i]);
         }
     }
     return 0;
@@ -247,45 +256,41 @@ int execCommand(char *args[])
 {
     char *command = args[0];
     char fullPath[256];
-    char sign[] = "/";
-    printf("DEBUG: IN EXEC");
 
     if (command[0] == '/' || command[0] == '.')
     {
-        printf("Absolute or ");
         int forkId = fork();
-
         if (forkId == 0)
         {
             execve(command, args, NULL);
             errorMsg();
             exit(1);
         }
-
         wait(NULL);
         return 0;
     }
 
+    // Try each path
     for (int i = 0; i < path_count; i++)
     {
         snprintf(fullPath, sizeof(fullPath), "%s/%s", path[i], args[0]);
         if (access(fullPath, X_OK) == 0)
         {
             int forkId2 = fork();
-
             if (forkId2 == 0)
             {
                 execve(fullPath, args, NULL);
                 errorMsg();
                 exit(1);
             }
+            wait(NULL);
+            return 0; // Return only after successfully executing
         }
-
-        wait(NULL);
-        return 0;
     }
 
-    return 0;
+    // If we get here, command wasn't found in any path
+    errorMsg();
+    return 1;
 }
 
 int processChange(char *args[], int k)
@@ -296,6 +301,7 @@ int processChange(char *args[], int k)
 
 int sendInput(char *args[], int k)
 {
+    char *command = args[0];
     int indx = 0;
     int redirectCount = 0;
     int pipeCount = 0;
@@ -303,6 +309,7 @@ int sendInput(char *args[], int k)
     bool isRedirect = false;
     bool isPipe = false;
     bool isProcess = false;
+    bool isHistory = false;
 
     for (int i = 0; i < k; i++)
     {
@@ -326,6 +333,13 @@ int sendInput(char *args[], int k)
         }
     }
 
+    if (command[0] == '!')
+    {
+        printf("DEBUG: %c", command[0]);
+        runHistory(command);
+        isHistory = true;
+    }
+
     if (redirectCount > 1)
     {
         errorMsg();
@@ -347,60 +361,40 @@ int sendInput(char *args[], int k)
     if (redirectCount == 1)
     {
         printf("REDIRECT");
-        redirect(args, indx);
+        if (args[indx + 2] == NULL)
+        {
+            if (!strcmp(args[indx], "<"))
+            {
+                printf("REDIRECT IN");
+                redirectIn(args, indx);
+            }
+            else if (!strcmp(args[indx], ">"))
+            {
+                printf("REDIRECT OUT");
+                redirectOut(args, indx);
+            }
+        }
+        else
+        {
+            errorMsg();
+            return 1;
+        }
     }
     if (pipeCount > 0)
+    {
         printf("PIPES");
+        pipes(args, k);
+    }
     if (processCount > 0)
     {
         printf("PROCESS");
         parallelProcess(args, k);
     }
 
-    if (redirectCount == 0 && pipeCount == 0 && processCount == 0)
+    if (redirectCount == 0 && pipeCount == 0 && processCount == 0 && isHistory == false)
     {
         intMode(args);
     }
-
-    return 0;
-}
-
-int redirect(char *args[], int k)
-{
-    int file;
-    char *arr[50];
-    int stdoutCopy = dup(STDOUT_FILENO);
-    if (args[k + 2] == NULL)
-    {
-        if (!strcmp(args[k], "<"))
-            printf("REDIRECT IN");
-        else if (!strcmp(args[k], ">"))
-        {
-            printf("REDIRECT OUT");
-            file = open(args[k + 1], O_WRONLY | O_CREAT | O_TRUNC, 0777);
-            if (file == -1)
-                errorMsg();
-            int file2 = dup2(file, STDOUT_FILENO);
-            if (file2 == -1)
-                errorMsg();
-        }
-    }
-    else
-    {
-        errorMsg();
-        return 1;
-    }
-    int j = 0;
-    for (int i = 0; i < k; i++)
-    {
-        arr[j++] = args[i];
-    }
-    arr[j] = NULL;
-    intMode(arr);
-    close(file);
-
-    dup2(stdoutCopy, STDOUT_FILENO);
-    close(stdoutCopy);
 
     return 0;
 }
@@ -443,5 +437,178 @@ int parallelProcess(char *args[], int k)
         }
     }
 
+    return 0;
+}
+
+int pipes(char *args[], int k)
+{
+    int prev_pipe = -1;
+    int cmd_start = 0;
+
+    for (int i = 0; i <= k; i++)
+    {
+        int pipefd[2];
+        int has_next = (i < k && !strcmp(args[i], "|"));
+
+        if (args[i] == NULL || has_next)
+        {
+            args[i] = NULL;
+
+            if (has_next)
+            {
+                if (pipe(pipefd) == -1)
+                {
+                    errorMsg();
+                    return 1;
+                }
+            }
+
+            int pid = fork();
+            if (pid == 0) // Child process
+            {
+                if (prev_pipe != -1)
+                {
+                    dup2(prev_pipe, STDIN_FILENO);
+                    close(prev_pipe);
+                }
+                if (has_next)
+                {
+                    dup2(pipefd[1], STDOUT_FILENO);
+                    close(pipefd[1]);
+                    close(pipefd[0]); // Child doesn't need read end
+                }
+
+                execvp(args[cmd_start], &args[cmd_start]); // Use execvp instead
+                exit(1);
+            }
+            else // Parent process
+            {
+                if (prev_pipe != -1)
+                    close(prev_pipe);
+
+                if (has_next)
+                {
+                    close(pipefd[1]);
+                    prev_pipe = pipefd[0];
+                }
+                else
+                {
+                    prev_pipe = -1;
+                }
+            }
+
+            cmd_start = i + 1;
+        }
+    }
+
+    // Wait for all child processes
+    while (wait(NULL) > 0)
+        ;
+    return 0;
+}
+
+int batchMode(char *argv[])
+{
+    FILE *batchFile = fopen(argv[1], "r");
+    if (batchFile == NULL)
+    {
+        errorMsg();
+        exit(1);
+    }
+
+    size_t buff = 256;
+    char *input = malloc(buff);
+    while (fgets(input, buff, batchFile) != NULL)
+    {
+        printf("DEBUG: Executing command -> %s", input);
+        cleanInput(input);
+    }
+
+    free(input);
+    fclose(batchFile);
+    return 0;
+}
+
+int redirectIn(char *args[], int k)
+{
+    int file;
+    char *arr[50];
+    int stdinCopy = dup(STDIN_FILENO);
+
+    file = open(args[k + 1], O_RDONLY);
+
+    if (file == -1)
+        errorMsg();
+
+    int file2 = dup2(file, STDIN_FILENO);
+
+    if (file2 == -1)
+        errorMsg();
+
+    int j = 0;
+    for (int i = 0; i < k; i++)
+    {
+        arr[j++] = args[i];
+    }
+    arr[j] = NULL;
+
+    intMode(arr);
+    close(file);
+
+    dup2(stdinCopy, STDIN_FILENO);
+    close(stdinCopy);
+
+    return 0;
+}
+
+int redirectOut(char *args[], int k)
+{
+    int file;
+    char *arr[50];
+    int stdoutCopy = dup(STDOUT_FILENO);
+
+    file = open(args[k + 1], O_WRONLY | O_CREAT | O_TRUNC, 0777);
+
+    if (file == -1)
+        errorMsg();
+
+    int file2 = dup2(file, STDOUT_FILENO);
+
+    if (file2 == -1)
+        errorMsg();
+
+    int j = 0;
+    for (int i = 0; i < k; i++)
+    {
+        arr[j++] = args[i];
+    }
+    arr[j] = NULL;
+    intMode(arr);
+    close(file);
+
+    dup2(stdoutCopy, STDOUT_FILENO);
+    close(stdoutCopy);
+
+    return 0;
+}
+
+int runHistory(char *input)
+{
+    int num = atoi(input + 1); // Convert the number after !
+
+    // Check if number is valid (between 1 and history_count)
+    if (num <= 0 || num > history_count)
+    {
+        errorMsg();
+        return 1;
+    }
+    printf("DEBUG: IN HISTORY COUNT: %d", history_count);
+
+    // Get the command from history (adjust for 0-based array)
+    char *historyCmd = strdup(history[num - 1]);
+    printf("%s\n", historyCmd); // Echo the command being executed
+
+    // Parse and execute the historical command
+    cleanInput(historyCmd);
     return 0;
 }
