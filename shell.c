@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <fcntl.h>
+#include <signal.h>
 
 #define HISTORY_SIZE 10
 #define PATH_COUNT 100
@@ -36,6 +37,7 @@ int redirectOut(char *args[], int k);
 int redirectIn(char *args[], int k);
 int pipes(char *args[], int k);
 int runHistory(char *args);
+int killProcess(char *args[]);
 
 void errorMsg()
 {
@@ -49,13 +51,13 @@ int main(int argc, char *argv[])
 
     if (argc == 1)
     {
-        printf("Interactive Mode\n");
+        // printf("Interactive Mode\n");
         shellLoop();
     }
 
     else if (argc == 2)
     {
-        printf("Batch Mode\n");
+        // printf("Batch Mode\n");
         batchMode(argv);
     }
 
@@ -70,7 +72,7 @@ int main(int argc, char *argv[])
 
 int intMode(char *args[])
 {
-    printf("DEBUG: %s %s", args[0], args[1]);
+    // printf("DEBUG: %s %s", args[0], args[1]);
     if (args == NULL || args[0] == NULL)
     {
         errorMsg();
@@ -80,15 +82,15 @@ int intMode(char *args[])
     if (!strcmp(args[0], "exit") || !strcmp(args[0], "cd") || !strcmp(args[0], "kill") ||
         !strcmp(args[0], "history") || !strcmp(args[0], "pwd") || !strcmp(args[0], "path"))
     {
-        printf("BUILTIN MODE\n");
+        // printf("BUILTIN MODE\n");
         builtins(args);
     }
     else
     {
-        printf("EXEC MODE\n");
+        // printf("EXEC MODE\n");
         execCommand(args);
-        for (int i = 0; i < 6 && args[i] != NULL; i++)
-            printf("%s", args[i]);
+        // for (int i = 0; i < 6 && args[i] != NULL; i++)
+        // printf("%s", args[i]);
     }
     return 0;
 }
@@ -101,25 +103,23 @@ int builtins(char *args[])
     }
     else if (!strcmp(args[0], "cd"))
     {
-        printf("CD");
+        // printf("CD");
         changeDir(args);
     }
     else if (!strcmp(args[0], "kill"))
     {
-        printf("KILL");
+        // printf("KILL");
+        killProcess(args);
     }
-    else if (!strcmp(args[0], "history"))
-    {
-        printf("HISTORY\n");
-    }
+
     else if (!strcmp(args[0], "pwd"))
     {
-        printf("PWD");
+        // printf("PWD");
         printDir();
     }
     else if (!strcmp(args[0], "path"))
     {
-        printf("PATH");
+        // printf("PATH");
         setPath(args);
     }
 
@@ -129,14 +129,31 @@ int builtins(char *args[])
 int shellLoop()
 {
     size_t buff = 256;
-    char *input = malloc(buff);
+    char *input = NULL;
+
     while (true)
     {
         printf("$> ");
         getline(&input, &buff, stdin);
+
+        if (strcmp(input, "\n") == 0)
+        {
+            free(input);
+            input = NULL;
+            continue;
+        }
+
+        if (strcmp(input, "exit\n") == 0)
+        {
+            free(input);
+            break;
+        }
+
         cleanInput(input);
+        free(input);
+        input = NULL;
     }
-    free(input);
+    return 0;
 }
 
 int cleanInput(char *input)
@@ -151,7 +168,7 @@ int cleanInput(char *input)
         input[strlen(input) - 1] = '\0';
         originalInput[strlen(originalInput) - 1] = '\0';
     }
-    printf("%s\n", input);
+    // printf("%s\n", input);
     parseInput(input);
     printHistory(originalInput);
     return 0;
@@ -175,7 +192,7 @@ int parseInput(char *input)
 
 int printHistory(char *input)
 {
-    printf("INPUT IN HISTORY %s", input);
+    // printf("INPUT IN HISTORY %s", input);
     if (!strcmp(input, "history"))
     {
         for (int i = 0; i < history_count; i++)
@@ -257,7 +274,7 @@ int execCommand(char *args[])
     char *command = args[0];
     char fullPath[256];
 
-    if (command[0] == '/' || command[0] == '.')
+    if (command[0] == '/')
     {
         int forkId = fork();
         if (forkId == 0)
@@ -335,9 +352,15 @@ int sendInput(char *args[], int k)
 
     if (command[0] == '!')
     {
-        printf("DEBUG: %c", command[0]);
+        //  printf("DEBUG: %c", command[0]);
         runHistory(command);
         isHistory = true;
+    }
+
+    if (command[0] == '.')
+    {
+        processCount += 1;
+        isProcess = true;
     }
 
     if (redirectCount > 1)
@@ -360,17 +383,17 @@ int sendInput(char *args[], int k)
 
     if (redirectCount == 1)
     {
-        printf("REDIRECT");
+        //  printf("REDIRECT");
         if (args[indx + 2] == NULL)
         {
             if (!strcmp(args[indx], "<"))
             {
-                printf("REDIRECT IN");
+                //   printf("REDIRECT IN");
                 redirectIn(args, indx);
             }
             else if (!strcmp(args[indx], ">"))
             {
-                printf("REDIRECT OUT");
+                //   printf("REDIRECT OUT");
                 redirectOut(args, indx);
             }
         }
@@ -382,12 +405,12 @@ int sendInput(char *args[], int k)
     }
     if (pipeCount > 0)
     {
-        printf("PIPES");
+        //  printf("PIPES");
         pipes(args, k);
     }
     if (processCount > 0)
     {
-        printf("PROCESS");
+        //  printf("PROCESS");
         parallelProcess(args, k);
     }
 
@@ -415,12 +438,12 @@ int parallelProcess(char *args[], int k)
             if (forkID == 0)
             {
                 execvp(args[start], &args[start]);
-                perror("execvp failed");
+                errorMsg();
                 exit(1);
             }
             else if (forkID < 0)
             {
-                perror("fork failed");
+                errorMsg();
             }
 
             if (i == k)
@@ -520,7 +543,7 @@ int batchMode(char *argv[])
     char *input = malloc(buff);
     while (fgets(input, buff, batchFile) != NULL)
     {
-        printf("DEBUG: Executing command -> %s", input);
+        //  printf("DEBUG: Executing command -> %s", input);
         cleanInput(input);
     }
 
@@ -602,7 +625,7 @@ int runHistory(char *input)
         errorMsg();
         return 1;
     }
-    printf("DEBUG: IN HISTORY COUNT: %d", history_count);
+    // printf("DEBUG: IN HISTORY COUNT: %d", history_count);
 
     // Get the command from history (adjust for 0-based array)
     char *historyCmd = strdup(history[num - 1]);
@@ -610,5 +633,45 @@ int runHistory(char *input)
 
     // Parse and execute the historical command
     cleanInput(historyCmd);
+    return 0;
+}
+
+int killProcess(char *args[])
+{
+    if (args[1] == NULL)
+    {
+        errorMsg();
+        return 1;
+    }
+
+    int signal = SIGTERM;
+    int pidIndex = 1;
+
+    if (args[1][0] == '-')
+    {
+        signal = atoi(args[1] + 1);
+        pidIndex = 2;
+    }
+
+    if (args[pidIndex] == NULL)
+    {
+        errorMsg();
+        return 1;
+    }
+
+    int pid = atoi(args[pidIndex]);
+    if (pid <= 0)
+    {
+        errorMsg();
+        return 1;
+    }
+
+    if (kill(pid, signal) == -1)
+    {
+        errorMsg();
+        return 1;
+    }
+
+    errorMsg();
     return 0;
 }
