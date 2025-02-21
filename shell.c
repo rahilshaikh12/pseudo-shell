@@ -311,12 +311,6 @@ int execCommand(char *args[])
     return 1;
 }
 
-int processChange(char *args[], int k)
-{
-
-    return 0;
-}
-
 int sendInput(char *args[], int k)
 {
     char *command = args[0];
@@ -324,9 +318,6 @@ int sendInput(char *args[], int k)
     int redirectCount = 0;
     int pipeCount = 0;
     int processCount = 0;
-    bool isRedirect = false;
-    bool isPipe = false;
-    bool isProcess = false;
     bool isHistory = false;
 
     for (int i = 0; i < k; i++)
@@ -334,7 +325,6 @@ int sendInput(char *args[], int k)
         if (!strcmp(args[i], "<") || !strcmp(args[i], ">"))
         {
             redirectCount++;
-            isRedirect = true;
 
             if (redirectCount == 1)
                 indx = i;
@@ -342,12 +332,10 @@ int sendInput(char *args[], int k)
         if (!strcmp(args[i], "|"))
         {
             pipeCount++;
-            isPipe = true;
         }
         if (!strcmp(args[i], "&"))
         {
             processCount++;
-            isProcess = true;
         }
     }
 
@@ -361,7 +349,6 @@ int sendInput(char *args[], int k)
     if (command[0] == '.')
     {
         processCount += 1;
-        isProcess = true;
     }
 
     if (redirectCount > 1)
@@ -426,7 +413,6 @@ int sendInput(char *args[], int k)
 int parallelProcess(char *args[], int k)
 {
     int start = 0;
-    int lastForeground = 1;
     for (int i = 0; i <= k; i++)
     {
         if (i == k || strcmp(args[i], "&") == 0)
@@ -457,7 +443,6 @@ int parallelProcess(char *args[], int k)
             }
 
             start = i + 1;
-            lastForeground = (i == k);
         }
     }
 
