@@ -5,6 +5,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <sys/wait.h>
 
 #define HISTORY_SIZE 10
 #define PATH_COUNT 100
