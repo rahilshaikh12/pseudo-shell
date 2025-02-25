@@ -10,7 +10,6 @@
 #define HISTORY_SIZE 10
 #define PATH_COUNT 100
 
-// Global history array to retain previous commands
 char *history[HISTORY_SIZE];
 int history_count = 0; // Number of stored commands
 
@@ -83,14 +82,14 @@ int intMode(char *args[])
     if (!strcmp(args[0], "exit") || !strcmp(args[0], "cd") || !strcmp(args[0], "kill") ||
         !strcmp(args[0], "history") || !strcmp(args[0], "pwd") || !strcmp(args[0], "path"))
     {
-        // printf("BUILTIN MODE\n");
+        //  printf("BUILTIN MODE\n");
         builtins(args);
     }
     else
     {
         // printf("EXEC MODE\n");
         execCommand(args);
-        // for (int i = 0; i < 6 && args[i] != NULL; i++)
+        //  for (int i = 0; i < 6 && args[i] != NULL; i++)
         // printf("%s", args[i]);
     }
     return 0;
@@ -109,18 +108,15 @@ int builtins(char *args[])
     }
     else if (!strcmp(args[0], "kill"))
     {
-        // printf("KILL");
         killProcess(args);
     }
 
     else if (!strcmp(args[0], "pwd"))
     {
-        // printf("PWD");
         printDir();
     }
     else if (!strcmp(args[0], "path"))
     {
-        // printf("PATH");
         setPath(args);
     }
 
@@ -169,7 +165,7 @@ int cleanInput(char *input)
         input[strlen(input) - 1] = '\0';
         originalInput[strlen(originalInput) - 1] = '\0';
     }
-    // printf("%s\n", input);
+    //  printf("%s\n", input);
     parseInput(input);
     printHistory(originalInput);
     return 0;
@@ -179,15 +175,68 @@ int parseInput(char *input)
 {
     int i = 0;
     char *args[100];
-    char *tokens = strtok(input, " ");
+    int len = strlen(input);
+    int pos = 0;
 
-    while (tokens != NULL)
+    while (pos < len)
     {
-        args[i++] = tokens;
-        tokens = strtok(NULL, " ");
+        // Skip any leading whitespace
+        while (pos < len && (input[pos] == ' ' || input[pos] == '\t'))
+            pos++;
+        if (pos >= len)
+            break;
+
+        // If the token starts with a quote, handle it specially
+        if (input[pos] == '\"' || input[pos] == '\'')
+        {
+            char quote = input[pos];
+            pos++; // Skip the opening quote
+            int start = pos;
+            // Find the closing matching quote
+            while (pos < len && input[pos] != quote)
+                pos++;
+            int token_len = pos - start;
+            char *token = malloc(token_len + 1);
+            if (!token)
+            {
+                errorMsg();
+                exit(1);
+            }
+            strncpy(token, input + start, token_len);
+            token[token_len] = '\0';
+            args[i++] = token;
+            if (pos < len)
+            {
+                pos++; // Skip the closing quote
+            }
+        }
+        else
+        {
+            // Normal token: read until next whitespace
+            int start = pos;
+            while (pos < len && input[pos] != ' ' && input[pos] != '\t')
+                pos++;
+            int token_len = pos - start;
+            char *token = malloc(token_len + 1);
+            if (!token)
+            {
+                errorMsg();
+                exit(1);
+            }
+            strncpy(token, input + start, token_len);
+            token[token_len] = '\0';
+            args[i++] = token;
+        }
     }
+
     args[i] = NULL;
+    // INPUT, SENDING TO SEND INPUT");
     sendInput(args, i);
+
+    // Free allocated tokens
+    for (int j = 0; j < i; j++)
+        free(args[j]);
+
     return 0;
 }
 
@@ -216,16 +265,16 @@ int printHistory(char *input)
 
 int changeDir(char *args[])
 {
-    char s[100];
+    // char s[100];
 
     if (countArgs(args) > 2)
         errorMsg();
-    printf("%s\n", getcwd(s, 100));
+    //  printf("%s\n", getcwd(s, 100));
     int cDir = chdir(args[1]);
     if (cDir != 0)
         errorMsg();
 
-    printf("%s\n", getcwd(s, 100));
+    // printf("%s\n", getcwd(s, 100));
     return 0;
 }
 
@@ -244,9 +293,10 @@ int printDir()
     return 0;
 }
 
-int setPath(char *args[])
+           int
+           setPath(char *args[])
 {
-    printf("%s\n", path[0]);
+    // printf("%s\n", path[0]);
     memset(path, 0, sizeof(path));
     path_count = 0;
 
@@ -313,31 +363,41 @@ int execCommand(char *args[])
 
 int sendInput(char *args[], int k)
 {
+    // printf("IN SEND INPUT\n");
     char *command = args[0];
-    int indx = 0;
+    int inRedirect = 0;
+    int outRedirect = 0;
     int redirectCount = 0;
     int pipeCount = 0;
     int processCount = 0;
     bool isHistory = false;
+    int inIndex = -1;
+    int outIndex = -1;
 
+    // Count redirections and find their positions
     for (int i = 0; i < k; i++)
     {
-        if (!strcmp(args[i], "<") || !strcmp(args[i], ">"))
+        if (!strcmp(args[i], "<"))
         {
-            redirectCount++;
-
-            if (redirectCount == 1)
-                indx = i;
+            inRedirect++;
+            inIndex = i;
         }
-        if (!strcmp(args[i], "|"))
+        else if (!strcmp(args[i], ">"))
+        {
+            outRedirect++;
+            outIndex = i;
+        }
+        else if (!strcmp(args[i], "|"))
         {
             pipeCount++;
         }
-        if (!strcmp(args[i], "&"))
+        else if (!strcmp(args[i], "&"))
         {
             processCount++;
         }
     }
+
+    redirectCount = inRedirect + outRedirect;
 
     if (command[0] == '!')
     {
@@ -351,7 +411,8 @@ int sendInput(char *args[], int k)
         processCount += 1;
     }
 
-    if (redirectCount > 1)
+    // Validation checks
+    if (redirectCount > 2 || inRedirect > 1 || outRedirect > 1)
     {
         errorMsg();
         return 1;
@@ -369,42 +430,107 @@ int sendInput(char *args[], int k)
         return 1;
     }
 
-    if (redirectCount == 1)
+    // Handle redirections
+    if (redirectCount > 0)
     {
-        //  printf("REDIRECT");
-        if (args[indx + 2] == NULL)
-        {
-            if (!strcmp(args[indx], "<"))
-            {
-                //   printf("REDIRECT IN");
-                redirectIn(args, indx);
-            }
-            else if (!strcmp(args[indx], ">"))
-            {
-                //   printf("REDIRECT OUT");
-                redirectOut(args, indx);
-            }
-        }
-        else
-        {
-            errorMsg();
-            return 1;
-        }
-    }
-    if (pipeCount > 0)
-    {
-        //  printf("PIPES");
-        pipes(args, k);
-    }
-    if (processCount > 0)
-    {
-        //  printf("PROCESS");
-        parallelProcess(args, k);
-    }
+        //  printf("REDIRECT(S) DETECTED\n");
 
-    if (redirectCount == 0 && pipeCount == 0 && processCount == 0 && isHistory == false)
+        // Handle both input and output redirections
+        if (inRedirect > 0 && outRedirect > 0)
+        {
+            //   printf("BOTH REDIRECTIONS\n");
+
+            // Save file descriptors
+            int stdinCopy = dup(STDIN_FILENO);
+            int stdoutCopy = dup(STDOUT_FILENO);
+
+            // Setup input redirection
+            int inFile = open(args[inIndex + 1], O_RDONLY);
+            if (inFile == -1)
+            {
+                errorMsg();
+                close(stdinCopy);
+                close(stdoutCopy);
+                return 1;
+            }
+
+            if (dup2(inFile, STDIN_FILENO) == -1)
+            {
+                errorMsg();
+                close(inFile);
+                close(stdinCopy);
+                close(stdoutCopy);
+                return 1;
+            }
+            close(inFile);
+
+            // Setup output redirection
+            int outFile = open(args[outIndex + 1], O_WRONLY | O_CREAT | O_TRUNC, 0777);
+            if (outFile == -1)
+            {
+                errorMsg();
+                dup2(stdinCopy, STDIN_FILENO); // Restore stdin
+                close(stdinCopy);
+                close(stdoutCopy);
+                return 1;
+            }
+
+            if (dup2(outFile, STDOUT_FILENO) == -1)
+            {
+                errorMsg();
+                close(outFile);
+                dup2(stdinCopy, STDIN_FILENO); // Restore stdin
+                close(stdinCopy);
+                close(stdoutCopy);
+                return 1;
+            }
+            close(outFile);
+
+            char *cmdArgs[100];
+            int cmdIndex = 0;
+
+            for (int i = 0; i < k; i++)
+            {
+                if (i == inIndex || i == inIndex + 1 || i == outIndex || i == outIndex + 1)
+                    continue;
+                cmdArgs[cmdIndex++] = args[i];
+            }
+            cmdArgs[cmdIndex] = NULL;
+
+            intMode(cmdArgs);
+
+            // Restore file descriptors
+            dup2(stdinCopy, STDIN_FILENO);
+            dup2(stdoutCopy, STDOUT_FILENO);
+            close(stdinCopy);
+            close(stdoutCopy);
+
+            return 0;
+        }
+        else if (inRedirect > 0)
+        {
+            //   printf("INPUT REDIRECTION\n");
+            return redirectIn(args, inIndex);
+        }
+        else // outRedirect > 0
+        {
+            //   printf("OUTPUT REDIRECTION\n");
+            return redirectOut(args, outIndex);
+        }
+    }
+    else if (pipeCount > 0)
     {
-        intMode(args);
+        //   printf("PIPES\n");
+        return pipes(args, k);
+    }
+    else if (processCount > 0)
+    {
+        //  printf("PROCESS\n");
+        return parallelProcess(args, k);
+    }
+    else if (!isHistory)
+    {
+        return intMode(args);
     }
 
     return 0;
@@ -611,11 +737,11 @@ int runHistory(char *input)
         errorMsg();
         return 1;
     }
-    // printf("DEBUG: IN HISTORY COUNT: %d", history_count);
+    //  printf("DEBUG: IN HISTORY COUNT: %d", history_count);
 
     // Get the command from history (adjust for 0-based array)
     char *historyCmd = strdup(history[num - 1]);
-    printf("%s\n", historyCmd); // Echo the command being executed
+    //  printf("%s\n", historyCmd); // Echo the command being executed
 
     // Parse and execute the historical command
     cleanInput(historyCmd);
